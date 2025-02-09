@@ -3,24 +3,21 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 void main() {
-  runApp(const MyApp());
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: const AQIPage(),
+      theme: ThemeData(primarySwatch: Colors.blueGrey),
+      home: AQIPage(),
     );
   }
 }
 
 class AQIPage extends StatefulWidget {
-  const AQIPage({super.key});
-
   @override
   State<AQIPage> createState() => _AQIPageState();
 }
@@ -30,14 +27,7 @@ class _AQIPageState extends State<AQIPage> {
   int aqi = 0;
   double temperature = 0.0;
   String status = "Loading...";
-  String lastUpdated = "";
-
-  double futureData1 = 0.0;
-  double futureData2 = 0.0;
-  double futureData3 = 0.0;
-  double futureData4 = 0.0;
-  double futureData5 = 0.0;
-  double futureData6 = 0.0;
+  List<int> forecastAQI = List.filled(6, 0);
 
   Future<void> fetchData() async {
     const token = "3c659e171185255bb94993819b88572bfa6f6b7e";
@@ -49,26 +39,21 @@ class _AQIPageState extends State<AQIPage> {
         final data = json.decode(response.body);
         setState(() {
           aqi = data['data']['aqi'];
-          temperature = data['data']['iaqi']['t']['v'].toDouble();
+          temperature = (data['data']['iaqi']?['t']?['v'] ?? 0.0).toDouble();
           status = getAQIStatus(aqi);
-          lastUpdated = _getFormattedDateTime();
-
-          // กำหนดค่าตัวอย่างของข้อมูลการทำนาย (6 วันข้างหน้า)
-          futureData1 = 75;
-          futureData2 = 85;
-          futureData3 = 95;
-          futureData4 = 105;
-          futureData5 = 115;
-          futureData6 = 125;
+          
+          for (int i = 0; i < 6; i++) {
+            forecastAQI[i] = data['data']['forecast']?['daily']?['pm25']?[i]?['avg'] ?? 0;
+          }
         });
       } else {
         setState(() {
-          status = "Error fetching data";
+          status = "Error fetching data (Code: ${response.statusCode})";
         });
       }
     } catch (e) {
       setState(() {
-        status = "Network error";
+        status = "Network error: $e";
       });
     }
   }
@@ -82,9 +67,13 @@ class _AQIPageState extends State<AQIPage> {
     return "Hazardous";
   }
 
-  String _getFormattedDateTime() {
-    final now = DateTime.now();
-    return "${now.day}-${now.month}-${now.year} ${now.hour}:${now.minute}:${now.second}";
+  Color getAQIColor(int aqi) {
+    if (aqi <= 50) return Colors.green;
+    if (aqi <= 100) return Colors.yellow;
+    if (aqi <= 150) return Colors.orange;
+    if (aqi <= 200) return Colors.red;
+    if (aqi <= 300) return Colors.purple;
+    return Colors.brown;
   }
 
   @override
@@ -94,120 +83,115 @@ class _AQIPageState extends State<AQIPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    Color aqiColor = getAQIColor(aqi);
+Widget build(BuildContext context) {
+  Color aqiColor = getAQIColor(aqi);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Air Quality Index (AQI)"),
-        centerTitle: true,
-        backgroundColor: Colors.blueGrey,
-      ),
-      body: SingleChildScrollView(  // Make the entire body scrollable
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+  return Scaffold(
+    appBar: AppBar(
+      title: const Text("Air Quality Index (AQI)"),
+      centerTitle: true,
+      backgroundColor: Colors.blueGrey,
+    ),
+    body: SingleChildScrollView(  // ห่อ Column ด้วย SingleChildScrollView
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          TextField(
+            onSubmitted: (value) {
+              setState(() {
+                city = value;
+              });
+              fetchData();
+            },
+            decoration: const InputDecoration(
+              labelText: "Enter city name",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            city,
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: aqiColor,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              "$aqi",
+              style: const TextStyle(
+                fontSize: 64,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            status,
+            style: TextStyle(
+              fontSize: 20,
+              color: aqiColor,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            "Temperature: ${temperature.toStringAsFixed(1)}°C",
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 20),
+          Row(
             children: [
-              Text(
-                city,
-                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: aqiColor,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  "$aqi",
-                  style: const TextStyle(
-                    fontSize: 64,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+              Flexible(
+                child: Column(
+                  children: List.generate(3, (index) => buildAQICard(index)),
                 ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                status,
-                style: TextStyle(
-                  fontSize: 20,
-                  color: aqiColor,
-                  fontWeight: FontWeight.bold,
+              Flexible(
+                child: Column(
+                  children: List.generate(3, (index) => buildAQICard(index + 3)),
                 ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                "Temperature: ${temperature.toStringAsFixed(1)}°C",
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                "Last updated: $lastUpdated",
-                style: const TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: fetchData,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                ),
-                child: const Text(
-                  "Refresh",
-                  style: TextStyle(
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              // แสดงข้อมูลการทำนาย 6 วันข้างหน้า
-              Text(
-                "Predicted AQI for next 6 days:",
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: aqiColor,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                "Day 1: $futureData1",
-                style: TextStyle(fontSize: 18),
-              ),
-              Text(
-                "Day 2: $futureData2",
-                style: TextStyle(fontSize: 18),
-              ),
-              Text(
-                "Day 3: $futureData3",
-                style: TextStyle(fontSize: 18),
-              ),
-              Text(
-                "Day 4: $futureData4",
-                style: TextStyle(fontSize: 18),
-              ),
-              Text(
-                "Day 5: $futureData5",
-                style: TextStyle(fontSize: 18),
-              ),
-              Text(
-                "Day 6: $futureData6",
-                style: TextStyle(fontSize: 18),
               ),
             ],
           ),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: fetchData,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+            ),
+            child: const Text(
+              "Refresh",
+              style: TextStyle(
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+
+  Widget buildAQICard(int index) {
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: getAQIColor(forecastAQI[index]),
+          child: Text(
+            "${forecastAQI[index]}",
+            style: const TextStyle(color: Colors.white),
+          ),
         ),
+        title: Text("Day ${index + 1}"),
+        subtitle: Text("AQI Forecast: ${forecastAQI[index]}"),
       ),
     );
-  }
-
-  Color getAQIColor(int aqi) {
-    if (aqi <= 50) return Colors.green;
-    if (aqi <= 100) return Colors.yellow;
-    if (aqi <= 150) return Colors.orange;
-    if (aqi <= 200) return Colors.red;
-    if (aqi <= 300) return Colors.purple;
-    return Colors.brown;
   }
 }
